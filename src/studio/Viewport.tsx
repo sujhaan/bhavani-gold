@@ -173,7 +173,8 @@ function Lights({ light }: { light: Light }) {
 // ------------------------------------------------------------ camera framing & capture
 export const viewportApi: { capture?: (views: ViewName[]) => Promise<Record<string, string>>; exportGLB?: () => Promise<Blob>; fullscreen?: () => void } = {};
 
-export function placeCamera(cam: THREE.Camera, controls: any, box: THREE.Box3, view: ViewName, size: { width: number; height: number }) {
+/** `insets` (px) keeps the piece clear of labels drawn over the top and bottom of the view. */
+export function placeCamera(cam: THREE.Camera, controls: any, box: THREE.Box3, view: ViewName, size: { width: number; height: number }, insets?: { top: number; bottom: number }) {
   const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
   const s = box.isEmpty() ? new THREE.Vector3(20, 20, 20) : box.getSize(new THREE.Vector3());
   const r = Math.max(s.x, s.y, s.z, 8);
@@ -182,8 +183,17 @@ export function placeCamera(cam: THREE.Camera, controls: any, box: THREE.Box3, v
   const vHalf = (32 / 2) * (Math.PI / 180);
   const hHalf = Math.atan(Math.tan(vHalf) * aspect);
   const wide = view === 'side' ? s.z : s.x;
-  const d = Math.max(r * 2.55, (wide / 2) / Math.tan(hHalf) * 1.3 + r * 0.5);
+  let d = Math.max(r * 2.55, (wide / 2) / Math.tan(hHalf) * 1.3 + r * 0.5);
+  let lift = 0;
+  if (insets && size.height > 0) {
+    const free = Math.max(0.35, (size.height - insets.top - insets.bottom) / size.height);
+    const tall = view === 'top' ? s.z : s.y;
+    d = Math.max(d, ((tall / 2) / (Math.tan(vHalf) * free)) * 1.12 + (view === 'front' ? s.z / 2 : r * 0.3));
+    // centre the piece in the clear band, not the whole view
+    lift = ((insets.top - insets.bottom) / 2 / size.height) * 2 * d * Math.tan(vHalf);
+  }
   const dir = { perspective: new THREE.Vector3(0.55, 0.4, 1), ring: new THREE.Vector3(0.3, 0.95, 1), front: new THREE.Vector3(0, 0, 1), back: new THREE.Vector3(0, 0, -1), side: new THREE.Vector3(1, 0, 0), top: new THREE.Vector3(0, 1, 0.0001) }[view].normalize();
+  if (lift) c.y += lift;
   cam.position.copy(c).addScaledVector(dir, d);
   cam.up.set(0, 1, 0);
   cam.lookAt(c);

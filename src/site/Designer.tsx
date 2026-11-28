@@ -32,7 +32,9 @@ const PIECE_ICON: Record<Piece, string> = {
 function Frame({ box, spin, view, fitKey }: { box: THREE.Box3; spin: boolean; view: 'front' | 'ring'; fitKey: string }) {
   const { camera, controls, size } = useThree();
   const ready = size.width > 0 && size.height > 0;
-  useEffect(() => { if (ready) placeCamera(camera, controls, box, view, size); }, [fitKey, view, controls, ready]); // eslint-disable-line
+  // on phones the badge, tools and weight boxes cover the top and bottom of the view: fit the piece between them
+  const small = size.width < 700;
+  useEffect(() => { if (ready) placeCamera(camera, controls, box, view, size, small ? { top: 54, bottom: 76 } : { top: 60, bottom: 90 }); }, [fitKey, view, controls, ready, small]); // eslint-disable-line
   useEffect(() => { if (controls) (controls as any).autoRotate = spin; }, [spin, controls]);
   return null;
 }
@@ -48,6 +50,14 @@ export default function Designer() {
   const [shot, setShot] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [hint, setHint] = useState(true);
+  // the tip goes away by itself a few seconds after the studio comes into view
+  useEffect(() => {
+    const el = stageRef.current; if (!el || !hint) return;
+    let t = 0;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting && !t) t = window.setTimeout(() => setHint(false), 6000); }, { threshold: 0.5 });
+    io.observe(el);
+    return () => { io.disconnect(); clearTimeout(t); };
+  }, [hint]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const three = useRef<{ scene: THREE.Scene; camera: THREE.Camera } | null>(null);
   const [upload, setUpload] = useState(false);

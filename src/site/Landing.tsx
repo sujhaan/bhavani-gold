@@ -192,7 +192,7 @@ function Marquee() {
 }
 
 function Statement() {
-  const text = 'Thirty years ago we were Bhavani Kata, a jewellery workshop. Today we sell 24K pure gold and still make jewellery to your design — and you talk to a real goldsmith, not a call centre.';
+  const text = 'Making, weighing and selling gold is our daily work. Today we sell 24K pure gold and still make jewellery to your design — and you talk to a real goldsmith, not a call centre.';
   return (
     <section className="statement">
       <p>{text.split(' ').map((w, i) => <span key={i} className="w">{w} </span>)}</p>
@@ -319,14 +319,24 @@ function Creations() {
 
 type StyleTab = 'Rose gold' | 'Beads' | '22K' | '18K' | '24K';
 const STYLES: { tab: StyleTab[]; name: string; karat: string; img: string; note: string }[] = [
-  { tab: ['Rose gold', '18K'], name: 'Halo pendant on cable chain', karat: '18K rose gold', img: 'style-rose-halo', note: 'A centre stone ringed with small diamonds.' },
-  { tab: ['Rose gold', 'Beads', '18K'], name: 'Gold bead bracelet', karat: '18K rose gold', img: 'style-rose-beads', note: 'Round beads on a fine chain, light for daily wear.' },
-  { tab: ['Rose gold', 'Beads', '18K'], name: 'Bead hoops', karat: '18K rose gold', img: 'style-rose-hoops', note: 'Small hoops with beads swinging on the rim.' },
-  { tab: ['Beads', '22K'], name: 'Gundla mala', karat: '22K yellow gold', img: 'style-gundla', note: 'The classic gold bead mala, bead after bead.' },
-  { tab: ['Beads', '22K'], name: 'Pearl mala with peacock', karat: '22K gold & pearls', img: 'style-pearl-mala', note: 'Pearls with a gold peacock pendant and pearl drops.' },
-  { tab: ['22K'], name: 'Temple jhumka', karat: '22K yellow gold', img: 'style-jhumka22', note: 'Kemp-set flower top, dome bell and pearl drops.' },
-  { tab: ['18K'], name: 'Diamond station chain', karat: '18K white gold', img: 'style-white-station', note: 'Fine chain with stones spaced along it.' },
-  { tab: ['18K'], name: 'Arabic star pendant', karat: '18K yellow gold', img: 'style-star18', note: 'Dubai-style eight-point star on a box chain.' },
+  { tab: ['Rose gold', '18K'], name: 'Flower & pearl bracelet', karat: '18K rose gold', img: 'ds-rose-velvet', note: 'Small stone flowers and pearls along a woven gold band.' },
+  { tab: ['Rose gold', '18K'], name: 'Pearl vine bangle', karat: '18K rose gold', img: 'ds-rose-pearl-vine', note: 'A stone flower in the centre, leaves and pearls on each side.' },
+  { tab: ['Rose gold', '18K'], name: 'Pink blossom bangle', karat: '18K rose gold', img: 'ds-rose-pink-flower', note: 'Five pink petals with pearls and white stone leaves.' },
+  { tab: ['Rose gold', '18K'], name: 'Pink vine bangle', karat: '18K rose gold', img: 'ds-rose-pink-vine', note: 'Curling vines lined with small stones, pink flower at the front.' },
+  { tab: ['Rose gold', '18K'], name: 'Pearl wave bangle', karat: '18K rose gold', img: 'ds-rose-pearl-wave', note: 'A waved stone line with pearls; plain band at the back.' },
+  { tab: ['Rose gold', '18K'], name: 'Single flower bangle', karat: '18K rose gold', img: 'ds-rose-flower-bangle', note: 'One stone flower and two pearls. Light and easy to wear daily.' },
+  { tab: ['Rose gold', 'Beads', '18K'], name: 'Woven pearl bracelet', karat: '18K rose gold', img: 'ds-rose-pearl-weave', note: 'A flexible woven bracelet with pearls set all around.' },
+  { tab: ['Rose gold', 'Beads', '18K'], name: 'Pearl drop bar necklace', karat: '18K rose gold', img: 'ds-rose-pearl-bar', note: 'A stone-set bar with five pearl drops on a fine chain.' },
+  { tab: ['Beads', '22K'], name: 'Pearl strand with gold beads', karat: '22K gold & pearls', img: 'ds-pearl-strand', note: 'Round pearls with two filigree gold beads and a hook clasp.' },
+  { tab: ['Beads', '18K'], name: 'Layered pearl necklace', karat: '18K gold & pearls', img: 'ds-layered-pearl', note: 'Three chains with pearls, gold beads and leaf charms.' },
+  { tab: ['Beads', '22K'], name: 'Pearl bangles, pair', karat: '22K gold & pearls', img: 'ds-pearl-bangles', note: 'A row of pearls with small stone flowers.' },
+  { tab: ['Beads', '22K'], name: 'Wave pearl bangles, pair', karat: '22K gold & pearls', img: 'ds-wave-bangles', note: 'Open gold waves holding pearls and stones.' },
+  { tab: ['22K'], name: 'Pearl choker', karat: '22K gold & pearls', img: 'ds-choker-flower', note: 'Leaf work with a stone flower and a fringe of pearls.' },
+  { tab: ['22K'], name: 'Leaf choker', karat: '22K gold & pearls', img: 'ds-choker-leaf', note: 'A slim leaf line with pearl drops and a centre pendant.' },
+  { tab: ['22K'], name: 'Round maang tikka', karat: '22K gold & pearls', img: 'ds-tikka-round', note: 'Stone-set round tikka with a pearl drop.' },
+  { tab: ['22K'], name: 'Drop maang tikka', karat: '22K gold & pearls', img: 'ds-tikka-drop', note: 'Teardrop tikka with a fringe of small pearls.' },
+  { tab: ['Beads', '22K'], name: 'Pearl anklet', karat: '22K gold & pearls', img: 'ds-anklet-pearl', note: 'A fine chain with pearl drops all around.' },
+  { tab: ['Beads', '22K'], name: 'Flower anklet', karat: '22K gold & pearls', img: 'ds-anklet-flower', note: 'Small stone flowers with a pearl under each one.' },
 ];
 function Styles() {
   const [tab, setTab] = useState<StyleTab>('Rose gold');
@@ -335,7 +345,7 @@ function Styles() {
     <section className="styles-sec" id="styles">
       <div className="sec-head row-head" data-reveal>
         <div><p className="kicker gold">New styles</p><h2 className="h2">Rose gold, beads,<br /><em>18K · 22K · 24K.</em></h2></div>
-        <p className="lead">New-age designs we can make for you. Each one is built in our 3D studio, so you can open it, change it and send it to us.</p>
+        <p className="lead">New-age designs we can make for you. Like one? Ask the price, or open the 3D studio to change it and send it to us.</p>
       </div>
       <div className="tabs dark" data-reveal>{(['Rose gold', 'Beads', '22K', '18K', '24K'] as const).map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
       {tab === '24K' ? (
@@ -357,14 +367,14 @@ function Styles() {
           ))}
         </div>
       )}
-      <p className="small fine-note">Pictures are made in our 3D studio. The finished piece is made by our goldsmiths; weight and price are confirmed before any order.</p>
+      <p className="small fine-note">Design pictures, shown for ideas. Each piece is made to order by our goldsmiths; weight and price are confirmed before anything is made.</p>
     </section>
   );
 }
 
 function Story() {
   const chapters: [string, string, string][] = [
-    ['About 30 years ago', 'Bhavani Kata', 'A jewellery workshop: we made jewellery, weighed it and sold it. DD balls, ready-made seelalu and pusalu, chain machines and more.'],
+    ['The beginning', 'A jewellery workshop', 'Under one roof: we made jewellery, weighed it and sold it. DD balls, ready-made seelalu and pusalu, chain machines and more.'],
     ['Over the years', 'A name for every item', 'Rings, chains, necklaces, harams, bracelets and new-age designs. Whenever new technology came to the market, we tried it.'],
     ['The last 5 years', 'Into gold bullion', '24K pure 999 gold biscuits of 100 g and 50 g, and small coins, for customers, goldsmiths and karigars.'],
     ['Today', 'Bhavani Gold', 'Bullion at the counter, and jewellery still made to your own design, now with a 3D designer on this page.'],
@@ -372,7 +382,7 @@ function Story() {
   return (
     <section className="story" id="story">
       <div className="sec-head row-head" data-reveal>
-        <div><p className="kicker gold">04 — Our story</p><h2 className="h2">From Bhavani Kata<br /><em>to Bhavani Gold.</em></h2></div>
+        <div><p className="kicker gold">04 — Our story</p><h2 className="h2">A lifetime<br /><em>in gold.</em></h2></div>
         <p className="lead">Thirty years of making, weighing and selling gold. The tools changed; the work didn’t.</p>
       </div>
       <ol className="timeline">
@@ -450,7 +460,7 @@ function Journal() {
 
 function Why() {
   const items: [string, string, string][] = [
-    ['30 years in gold', 'We started as Bhavani Kata, a jewellery workshop. Making, weighing and selling gold has been our daily work ever since.', 'real-bars'],
+    ['30 years in gold', 'We began as a jewellery workshop. Making, weighing and selling gold has been our daily work ever since.', 'real-bars'],
     ['Your design, your way', 'Show us a photo, a family piece or a 3D design. We make what you actually want.', 'p124'],
     ['Price before we start', 'You see the weight estimate first. We confirm rate, making and stone charges before anything is made.', 'p109'],
     ['Traditional craft', 'Mango harams, kasu malas, jhumkas and temple work by experienced goldsmiths.', 'p100'],
@@ -513,7 +523,7 @@ function Visit() {
   return (
     <footer className="foot" id="visit">
       <div className="foot-grid">
-        <div><a href="#top" className="logo big">BHAVANI<small>Gold · Vijayawada</small></a><p>24K gold bullion &amp; custom jewellery. Formerly Bhavani Kata, for about 30 years.</p></div>
+        <div><a href="#top" className="logo big">BHAVANI<small>Gold · Vijayawada</small></a><p>24K gold bullion &amp; custom jewellery.</p></div>
         <div><p className="mono">Visit</p><p>{SITE.address}<br /><span className="small">{SITE.landmark}</span></p><a className="ul" href={SITE.mapsUrl} target="_blank" rel="noreferrer">Open in Google Maps ↗</a></div>
         <div><p className="mono">Talk to us</p><p>WhatsApp / call<br /><a className="gold" href={wa('Hello Bhavani Gold!')} target="_blank" rel="noreferrer"><b>{SITE.whatsappDisplay}</b></a></p>
           <p>Email<br /><a className="ul" href={`mailto:${SITE.email}`}>{SITE.email}</a></p>
@@ -528,6 +538,13 @@ function Visit() {
 export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
   useMotion(root);
+  // hide the floating WhatsApp button while the 3D studio fills the phone screen
+  useEffect(() => {
+    const el = document.getElementById('design'); if (!el) return;
+    const io = new IntersectionObserver(([e]) => document.body.classList.toggle('in-studio', e.isIntersecting), { rootMargin: '-20% 0px -20% 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
     <div className="site" ref={root}>
       <div className="intro" aria-hidden><div className="door-l" /><div className="door-r" /><div className="intro-logo">BHAVANI<small>Gold · Vijayawada</small></div></div>
@@ -550,7 +567,7 @@ export default function Landing() {
       <Journal />
       <Cta />
       <Visit />
-      <a className="wa-float" href={wa('Hello Bhavani Gold!')} target="_blank" rel="noreferrer" aria-label="WhatsApp"><Icon name="wa" size={26} /></a>
+      <a className="wa-float" id="wa-float" href={wa('Hello Bhavani Gold!')} target="_blank" rel="noreferrer" aria-label="WhatsApp"><Icon name="wa" size={26} /></a>
     </div>
   );
 }

@@ -96,6 +96,18 @@ function Piece({ img, pose, version, onTap }: { img: HTMLCanvasElement; pose: Po
   );
 }
 
+/** Moves the camera back far enough that the whole piece fits, on narrow phone screens too. */
+function Fit({ aspect }: { aspect: number }) {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    const vHalf = (38 / 2) * (Math.PI / 180), view = size.width / Math.max(1, size.height);
+    const needW = 1.15 / (Math.tan(vHalf) * view), needH = (aspect * 1.15) / Math.tan(vHalf);
+    camera.position.set(0, 0, Math.max(3.4, needW, needH));
+    camera.lookAt(0, 0, 0);
+  }, [camera, size.width, size.height, aspect]);
+  return null;
+}
+
 export default function Relief3D({ img, pose, version, onGl, onTap }: { img: HTMLCanvasElement; pose: Pose; version: number; onGl?: (c: HTMLCanvasElement) => void; onTap?: (u: number, v: number) => void }) {
   return (
     <Canvas dpr={[1, 1.5]} gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.NoToneMapping }} camera={{ position: [0, 0, 3.4], fov: 38 }}
@@ -104,9 +116,10 @@ export default function Relief3D({ img, pose, version, onGl, onTap }: { img: HTM
       <ambientLight intensity={0.55} />
       <directionalLight position={[2.5, 3, 4]} intensity={1.05} />
       <directionalLight position={[-3, -1, 2]} intensity={0.3} color="#ffe2b8" />
+      <Fit aspect={img.height / Math.max(1, img.width)} />
       <Piece img={img} pose={pose} version={version} onTap={onTap} />
       <ContactShadows position={[0, -1.35, 0]} opacity={0.45} scale={4} blur={2.6} far={2} />
-      <OrbitControls makeDefault enablePan={false} enableDamping minDistance={1.8} maxDistance={6} minPolarAngle={0.6} maxPolarAngle={2.4} minAzimuthAngle={-1.2} maxAzimuthAngle={1.2} />
+      <OrbitControls makeDefault enablePan={false} enableDamping minDistance={1.8} maxDistance={9} minPolarAngle={0.6} maxPolarAngle={2.4} minAzimuthAngle={-1.2} maxAzimuthAngle={1.2} />
     </Canvas>
   );
 }

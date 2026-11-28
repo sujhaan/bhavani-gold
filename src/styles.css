@@ -340,7 +340,7 @@ html:not(.js) .statement .w { color: var(--ivory); }
   .foot-grid { grid-template-columns: 1fr; }
   .dz-row { grid-template-columns: 1fr; }
   .designer { overflow: clip; }
-  .dz-stage { position: sticky; top: 0; z-index: 3; height: 50vh; height: 50svh; min-height: 330px; border-bottom: 1px solid var(--line-2); }
+  .dz-stage { position: sticky; top: 0; z-index: 3; height: 54vh; height: 54svh; min-height: 340px; border-bottom: 1px solid var(--line-2); }
   .dz-panel { padding: 22px 18px; border-top: 0; }
   .dz-readout { left: 10px; right: 10px; bottom: 10px; gap: 6px; flex-wrap: nowrap; }
   .dz-readout > div { padding: 7px 10px; border-radius: 12px; }
@@ -537,7 +537,7 @@ button.btn-wa { width: 100%; border: 0; cursor: pointer; }
 .tabs.dark button.on { background: var(--gold); color: var(--ink); }
 .style-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin-top: 26px; }
 .style-card { background: var(--ink-2); border: 1px solid var(--line); border-radius: 24px; padding: 12px 12px 20px; display: flex; flex-direction: column; gap: 8px; }
-.style-img { aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; background: #3a2a1d; }
+.style-img { aspect-ratio: 3 / 2; border-radius: 16px; overflow: hidden; background: #3a2a1d; }
 .style-img img { width: 100%; height: 100%; object-fit: cover; transition: transform 1s var(--ease); }
 .style-card:hover .style-img img { transform: scale(1.04); }
 .style-card .mono { color: var(--gold); margin: 6px 6px 0; }
@@ -550,3 +550,7 @@ button.btn-wa { width: 100%; border: 0; cursor: pointer; }
 .fine-note { color: var(--mute); margin-top: 22px; }
 @media (max-width: 900px) { .style-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .style-24 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .style-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* phones: the floating WhatsApp button would sit on top of the studio's options */
+@media (max-width: 900px) { body.in-studio .wa-float { opacity: 0; pointer-events: none; } }
+.wa-float { transition: transform .4s var(--ease), opacity .3s; }

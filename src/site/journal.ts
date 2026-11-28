@@ -7,12 +7,12 @@ export const POSTS: Post[] = [
   {
     slug: 'our-story',
     kicker: 'Our story',
-    title: 'From Bhavani Kata to Bhavani Gold: 30 years in gold',
+    title: 'The Bhavani Gold story: 30 years in gold',
     summary: 'How a small jewellery workshop became a name for every kind of gold item, and why we now sell 24K gold biscuits too.',
     photo: 'p129',
     minutes: 3,
     body: [
-      'Bhavani Gold began about 30 years ago under a different name: Bhavani Kata. It was a working jewellery shop in the truest sense. We made jewellery, weighed it, and sold it, all under one roof.',
+      'Bhavani Gold began about 30 years ago as a working jewellery shop in the truest sense. We made jewellery, weighed it, and sold it, all under one roof.',
       '## A workshop first',
       'In those years the work was hands-on. We made DD balls and ready-made seelalu and pusalu, the small parts goldsmiths use to build ornaments. We ran chain machines and other workshop machines, and the name Bhavani became known across the market for every kind of jewellery item.',
       '- Rings and chains',
@@ -25,7 +25,7 @@ export const POSTS: Post[] = [
       'About five years ago we stepped into gold bullion. Today we sell 24K pure 999 gold biscuits of 100 g and 50 g, and small gold coins. We sell 24K gold to families buying for themselves, and to goldsmiths and karigars who need fine gold for their work.',
       '## Still making jewellery',
       'Bullion did not replace the workshop. We still make jewellery for customers to their own design. Bring a photo, a family piece, or a design you made in 3D on this page, and we will tell you the weight and price before anything is made.',
-      'Thirty years on, the idea is the same as it was at Bhavani Kata: honest weight, pure gold, and jewellery made the way you want it.',
+      'Thirty years on, the idea is the same as it was on day one: honest weight, pure gold, and jewellery made the way you want it.',
     ],
   },
   {

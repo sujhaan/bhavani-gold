@@ -20,6 +20,8 @@ export interface CutState {
   prior: Uint8Array; // 0 unknown, 1 jewellery seed, 2 background seed (automatic)
   user: Uint8Array; // 0 none, 1 keep, 2 remove (customer's brush)
   mask: Float32Array; // 0..1 result
+  sal: Float32Array | null; // 0..1 main-object map from the AI helper, if it ran
+  product: boolean; // no person in the photo (jewellery on a stand, table or tray)
 }
 
 const WORK = 640;
@@ -148,45 +150,94 @@ function gmmLL(g: GMM, L: number, A: number, B: number) {
   return mx + Math.log(s);
 }
 
-// ---------- face & hand hints (optional; the cut still works without them) ----------
-let humanP: Promise<unknown> | null = null;
+// ---------- AI helpers (optional; the cut still works without them) ----------
+// Both small models ship inside the page, so their requests are answered from memory.
+const BASE = 'https://local.models/';
+const files: Record<string, () => Promise<Response>> = {};
+let patched = false;
+function serve(name: string, make: () => Promise<Response>) {
+  files[name] = make;
+  if (patched) return;
+  patched = true;
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (u.startsWith(BASE)) { const f = files[u.slice(BASE.length)]; if (f) return f(); }
+    return realFetch(input, init);
+  };
+}
+const b64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const json = (t: string) => new Response(t, { headers: { 'Content-Type': 'application/json' } });
+const bin = (b: Uint8Array) => new Response(b as BodyInit, { headers: { 'Content-Type': 'application/octet-stream' } });
+
+type HumanT = { detect: (i: HTMLCanvasElement) => Promise<{ face: { box: number[]; score: number }[] }>; tf: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+let humanP: Promise<HumanT> | null = null;
+function getHuman(): Promise<HumanT> {
+  if (!humanP) humanP = (async () => {
+    const [{ Human }, binTxt, jsonText] = await Promise.all([
+      import('@vladmandic/human'),
+      import('./models/blazefaceBin').then((m) => m.default),
+      import('./models/blazeface.json?raw').then((m) => m.default as string),
+    ]);
+    serve('blazeface.json', async () => json(jsonText));
+    serve('blazeface.bin', async () => bin(b64(binTxt)));
+    const h = new Human({
+      backend: 'webgl', modelBasePath: BASE, warmup: 'none', debug: false, cacheSensitivity: 0,
+      face: { enabled: true, detector: { modelPath: 'blazeface.json', rotation: false, maxDetected: 4, minConfidence: 0.5 }, mesh: { enabled: false }, iris: { enabled: false }, description: { enabled: false }, emotion: { enabled: false }, antispoof: { enabled: false }, liveness: { enabled: false } },
+      hand: { enabled: false },
+      body: { enabled: false }, object: { enabled: false }, gesture: { enabled: false }, segmentation: { enabled: false }, filter: { enabled: false },
+    } as never);
+    await h.load();
+    return h as unknown as HumanT;
+  })();
+  return humanP;
+}
+
 export async function detectHints(img: HTMLCanvasElement): Promise<Hints> {
   try {
-    if (!humanP) humanP = (async () => {
-      const [{ Human }, binUrl, jsonText] = await Promise.all([
-        import('@vladmandic/human'),
-        import('./models/blazefaceBin').then((m) => m.default),
-        import('./models/blazeface.json?raw').then((m) => m.default as string),
-      ]);
-      // the small face model ships inside the page: answer its two requests from memory
-      const bin = Uint8Array.from(atob(binUrl), (c) => c.charCodeAt(0));
-      const base = 'https://local.models/';
-      const realFetch = window.fetch.bind(window);
-      window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-        const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (u.startsWith(base)) {
-          if (u.endsWith('.json')) return Promise.resolve(new Response(jsonText, { headers: { 'Content-Type': 'application/json' } }));
-          if (u.endsWith('.bin')) return Promise.resolve(new Response(bin, { headers: { 'Content-Type': 'application/octet-stream' } }));
-        }
-        return realFetch(input, init);
-      };
-      const h = new Human({
-        backend: 'webgl', modelBasePath: base, warmup: 'none', debug: false, cacheSensitivity: 0,
-        face: { enabled: true, detector: { modelPath: 'blazeface.json', rotation: false, maxDetected: 4, minConfidence: 0.5 }, mesh: { enabled: false }, iris: { enabled: false }, description: { enabled: false }, emotion: { enabled: false }, antispoof: { enabled: false }, liveness: { enabled: false } },
-        hand: { enabled: false },
-        body: { enabled: false }, object: { enabled: false }, gesture: { enabled: false }, segmentation: { enabled: false }, filter: { enabled: false },
-      } as never);
-      await h.load();
-      return h;
-    })();
-    const human = (await humanP) as { detect: (i: HTMLCanvasElement) => Promise<{ face: { box: number[]; score: number }[] }> };
+    const human = await getHuman();
     const res = await Promise.race([human.detect(img), new Promise<null>((r) => setTimeout(() => r(null), 12000))]);
     if (!res) return { faces: [], hands: [] };
     const toBox = (b: number[]) => ({ x: b[0], y: b[1], w: b[2], h: b[3] });
     return { faces: res.face.filter((f) => f.score >= 0.5).map((f) => toBox(f.box)), hands: [] };
   } catch (e) {
-    console.warn('Face/hand helper not available, using colour only.', e);
+    console.warn('Face helper not available, using colour only.', e);
     return { faces: [], hands: [] };
+  }
+}
+
+// The "main object" model (u2netp): tells the subject of the photo apart from the
+// background, table, flowers and props. It cannot tell jewellery from the person
+// wearing it; the colour and skin models below do that part.
+let salModelP: Promise<any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function saliency(img: HTMLCanvasElement): Promise<Float32Array | null> {
+  try {
+    const human = await getHuman();
+    const tf = human.tf;
+    if (!salModelP) salModelP = (async () => {
+      const [binTxt, jsonText] = await Promise.all([
+        import('./models/u2netpBin').then((m) => m.default),
+        import('./models/u2netp.json?raw').then((m) => m.default as string),
+      ]);
+      serve('u2netp.json', async () => json(jsonText));
+      serve('group1-shard1of1.bin', async () => bin(b64(binTxt)));
+      return tf.loadGraphModel(BASE + 'u2netp.json');
+    })();
+    const model = await salModelP;
+    const w = img.width, h = img.height;
+    const out: Float32Array = tf.tidy(() => {
+      const x = tf.div(tf.cast(tf.browser.fromPixels(img), 'float32'), 255);
+      const r = tf.image.resizeBilinear(x, [320, 320]);
+      const n = tf.expandDims(tf.div(tf.sub(r, tf.tensor1d([0.485, 0.456, 0.406])), tf.tensor1d([0.229, 0.224, 0.225])), 0);
+      const y = model.execute(n, 'Identity:0');
+      const mn = tf.min(y), mx = tf.max(y);
+      const s = tf.div(tf.sub(y, mn), tf.add(tf.sub(mx, mn), 1e-6));
+      return tf.reshape(tf.image.resizeBilinear(s, [h, w]), [h * w]).dataSync() as Float32Array;
+    });
+    return Float32Array.from(out);
+  } catch (e) {
+    console.warn('Main-object helper not available, using colour only.', e);
+    return null;
   }
 }
 
@@ -203,7 +254,7 @@ const inBox = (b: Box, x: number, y: number, s = 1) => { const cx = b.x + b.w / 
 const inFace = (b: Box, x: number, y: number, s = 1) => { const cx = b.x + b.w / 2, cy = b.y + b.h * 0.36, rx = (b.w * 0.34 * s), ry = (b.h * 0.38 * s); return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 < 1; };
 
 /** First, automatic cut. */
-export function autoCut(work: HTMLCanvasElement, hints: Hints): CutState {
+export function autoCut(work: HTMLCanvasElement, hints: Hints, sal: Float32Array | null = null): CutState {
   const w = work.width, h = work.height, N = w * h;
   const rgb = work.getContext('2d')!.getImageData(0, 0, w, h).data;
   const lab = new Float32Array(N * 3), lum = new Float32Array(N), H = new Float32Array(N), S = new Float32Array(N), V = new Float32Array(N);
@@ -221,8 +272,26 @@ export function autoCut(work: HTMLCanvasElement, hints: Hints): CutState {
 
   const gold = new Uint8Array(N);
   let gN = 0;
-  for (let i = 0; i < N; i++) { gold[i] = H[i] >= 22 && H[i] <= 58 && S[i] > 0.38 && V[i] > 0.35 && tex[i] > 0.035 ? 1 : 0; gN += gold[i]; }
-  if (gN < 0.003 * N) { gN = 0; for (let i = 0; i < N; i++) { gold[i] = H[i] >= 20 && H[i] <= 60 && S[i] > 0.24 && V[i] > 0.3 && tex[i] > 0.025 ? 1 : 0; gN += gold[i]; } }
+  // with the AI helper, metal only counts on the photo's main object (not the table, flowers or wall)
+  const onObj = (i: number, t = 0.35) => !sal || sal[i] > t;
+  for (let i = 0; i < N; i++) { gold[i] = H[i] >= 22 && H[i] <= 58 && S[i] > 0.38 && V[i] > 0.35 && tex[i] > 0.035 && onObj(i) ? 1 : 0; gN += gold[i]; }
+  if (gN < 0.003 * N) { gN = 0; for (let i = 0; i < N; i++) { gold[i] = ((H[i] >= 20 && H[i] <= 60) || (sal && (H[i] <= 20 || H[i] >= 345))) && S[i] > 0.24 && V[i] > 0.3 && tex[i] > 0.025 && onObj(i, 0.5) ? 1 : 0; gN += gold[i]; } }
+  // no face and hardly any skin: a product photo, where rose gold and pearls can be taken safely
+  // (judged on the main object only: a beige pedestal or backdrop is skin-coloured too)
+  let objN = 0, objSkin = 0;
+  if (sal) for (let i = 0; i < N; i++) if (sal[i] > 0.5) { objN++; if (skinC[i] && tex[i] < 0.03) objSkin++; }
+  const product = !!sal && hints.faces.length === 0 && objN > 0 && objSkin < 0.35 * objN;
+  if (sal && product) {
+    // the AI found the main object: also take rose gold, and pearls or stones beside the metal
+    for (let i = 0; i < N; i++) if (!gold[i] && (H[i] <= 22 || H[i] >= 345) && S[i] > 0.3 && V[i] > 0.4 && tex[i] > 0.03 && sal[i] > 0.45) { gold[i] = 1; gN++; }
+    const nearG = dilate(gold, w, h, 6);
+    for (let i = 0; i < N; i++) if (!gold[i] && nearG[i] && V[i] > 0.72 && tex[i] > 0.045 && sal[i] > 0.55) { gold[i] = 1; gN++; }
+  }
+  if (sal) {
+    // the outline of the main object (a bust's edge, a shoulder) is lit and textured but is not metal
+    const sb = boxBlur(sal, w, h, 4);
+    for (let i = 0; i < N; i++) if (gold[i] && Math.abs(sal[i] - sb[i]) > 0.06 && S[i] < 0.5) { gold[i] = 0; gN--; }
+  }
   // shiny white highlights on the gold belong to it too
   { const ring = dilate(gold, w, h, 3); for (let i = 0; i < N; i++) if (ring[i] && !gold[i] && V[i] > 0.78 && S[i] < 0.3 && !skinC[i]) gold[i] = 1; }
   // skin learnt from this photo: smooth skin-coloured areas, plus skin inside detected faces and hands
@@ -256,6 +325,10 @@ export function autoCut(work: HTMLCanvasElement, hints: Hints): CutState {
     // inside a face only clearly non-skin metal stays (a nose stud, a tikka)
     if (gold[i] && !skinLike[i] && (!faceCore[i] || S[i] > 0.5)) { prior[i] = 1; fgN++; }
   }
+  // large plain surfaces (a display bust, a pedestal, a wall) are never the piece, even if they are the main object
+  let plain = new Uint8Array(N);
+  if (sal) { for (let i = 0; i < N; i++) plain[i] = tex[i] < 0.016 ? 1 : 0; plain = dilate(erode(plain, w, h, 4), w, h, 2); }
+  if (sal) for (let i = 0; i < N; i++) if (plain[i] && prior[i] === 1) { prior[i] = 0; fgN--; }
   const fgOpen = dilate(erode(prior.map((v) => (v === 1 ? 1 : 0)), w, h, 1), w, h, 1);
   const near = dilate(fgOpen, w, h, 7);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -263,12 +336,12 @@ export function autoCut(work: HTMLCanvasElement, hints: Hints): CutState {
     if (prior[i] === 1 && !fgOpen[i]) prior[i] = 0;
     if (prior[i] === 1) continue;
     const border = x < bw || y < bw || x >= w - bw || y >= h - bw;
-    if (border || ((skinC[i] || skinLike[i]) && tex[i] < 0.06) || skinLike[i] || (!near[i] && tex[i] < 0.02) || (faceCore[i] && !(S[i] > 0.5 && gold[i]))) prior[i] = 2;
+    if ((sal && (sal[i] < 0.25 || plain[i])) || border || ((skinC[i] || skinLike[i]) && tex[i] < 0.06) || skinLike[i] || (!near[i] && tex[i] < 0.02) || (faceCore[i] && !(S[i] > 0.5 && gold[i]))) prior[i] = 2;
   }
-  const st: CutState = { w, h, rgb, lab, tex, sat: S, prior, user: new Uint8Array(N), mask: new Float32Array(N) };
+  const st: CutState = { w, h, rgb, lab, tex, sat: S, prior, user: new Uint8Array(N), mask: new Float32Array(N), sal, product };
   if (fgN < 30) {
     // nothing gold-like found (silver, white stones): start from the centre of the photo
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (Math.abs(x - w / 2) < w * 0.12 && Math.abs(y - h / 2) < h * 0.12 && !skinLike[i]) prior[i] = 1; }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if ((sal ? sal[i] > 0.7 && tex[i] > 0.03 : Math.abs(x - w / 2) < w * 0.12 && Math.abs(y - h / 2) < h * 0.12) && !skinLike[i]) prior[i] = 1; }
   }
   refine(st);
   return st;
@@ -305,12 +378,21 @@ export function refine(st: CutState) {
   }
   let m = new Uint8Array(N);
   for (let i = 0; i < N; i++) m[i] = user[i] === 1 ? 1 : user[i] === 2 ? 0 : p[i] > 0.5 && prior[i] !== 2 ? 1 : 0;
+  if (st.sal) {
+    // with the AI map, stay close to the metal that was actually found
+    const seeds = new Uint8Array(N); for (let i = 0; i < N; i++) seeds[i] = prior[i] === 1 ? 1 : 0;
+    const near = dilate(seeds, w, h, Math.max(3, Math.round(0.006 * Math.max(w, h))));
+    for (let i = 0; i < N; i++) if (!user[i]) m[i] = (m[i] && near[i]) || seeds[i] ? 1 : 0;
+  }
   // keep the pieces that contain jewellery seeds (or the customer's keep marks)
   const { lab: cl, size } = components(m, w, h);
   const seeded = new Uint8Array(size.length);
   for (let i = 0; i < N; i++) if (cl[i] && (prior[i] === 1 || user[i] === 1)) seeded[cl[i]] = 1;
   let big = 0; for (let l = 1; l < size.length; l++) if (seeded[l] && size[l] > big) big = size[l];
-  for (let i = 0; i < N; i++) { const l = cl[i]; m[i] = l && seeded[l] && (size[l] > Math.max(12, 0.07 * big) || user[i] === 1) ? 1 : 0; }
+  // with the AI map, a piece must be well covered by metal seeds (a patch of bust or cloth is not)
+  const seedN = new Int32Array(size.length);
+  if (st.sal) for (let i = 0; i < N; i++) if (cl[i] && prior[i] === 1) seedN[cl[i]]++;
+  for (let i = 0; i < N; i++) { const l = cl[i]; m[i] = l && seeded[l] && (size[l] > Math.max(12, 0.07 * big) || user[i] === 1) && (!st.sal || seedN[l] > 0.04 * size[l] || size[l] === big) ? 1 : 0; }
   // around the customer's keep marks, take in nearby pixels that look like the piece
   { const keep = new Uint8Array(N); let any = 0; for (let i = 0; i < N; i++) if (user[i] === 1) { keep[i] = 1; any = 1; }
     if (any) { const near = dilate(keep, w, h, 4); for (let i = 0; i < N; i++) if (keep[i] || (near[i] && p[i] > 0.3 && user[i] !== 2)) m[i] = 1; } }
@@ -320,10 +402,36 @@ export function refine(st: CutState) {
     for (let i = 0; i < N; i++) if (ring[i] && !m[i] && user[i] !== 2 && prior[i] !== 2 && p[i] > 0.25 && st.tex[i] > 0.045 && st.sat[i] > 0.28) { m[i] = 1; added++; }
     if (!added) break;
   }
+  // pearls and white stones set on the piece: small bright blobs touching it, on the main object
+  const extra = new Uint8Array(N);
+  if (st.sal && st.product) {
+    const sal = st.sal, V = new Float32Array(N);
+    for (let i = 0; i < N; i++) V[i] = Math.max(st.rgb[i * 4], st.rgb[i * 4 + 1], st.rgb[i * 4 + 2]) / 255;
+    const loc = boxBlur(V, w, h, 8), cand = new Uint8Array(N);
+    for (let i = 0; i < N; i++) cand[i] = !m[i] && user[i] !== 2 && sal[i] > 0.45 && st.sat[i] < 0.35 && V[i] > 0.6 && (V[i] - loc[i] > 0.03 || st.tex[i] > 0.04) ? 1 : 0;
+    const { lab: pl, size: ps } = components(cand, w, h);
+    // a pearl or stone is a small round blob; a lit edge of a bust or a shoulder is long and thin
+    const bx0 = new Int32Array(ps.length).fill(1e9), by0 = new Int32Array(ps.length).fill(1e9), bx1 = new Int32Array(ps.length).fill(-1), by1 = new Int32Array(ps.length).fill(-1);
+    for (let i = 0; i < N; i++) { const l = pl[i]; if (!l) continue; const x = i % w, y = (i - x) / w; if (x < bx0[l]) bx0[l] = x; if (x > bx1[l]) bx1[l] = x; if (y < by0[l]) by0[l] = y; if (y > by1[l]) by1[l] = y; }
+    const round = new Uint8Array(ps.length);
+    for (let l = 1; l < ps.length; l++) { const bw2 = bx1[l] - bx0[l] + 1, bh2 = by1[l] - by0[l] + 1; round[l] = ps[l] >= 4 && ps[l] < 0.002 * N && ps[l] / (bw2 * bh2) > 0.4 && Math.max(bw2, bh2) / Math.min(bw2, bh2) < 2.5 ? 1 : 0; }
+    for (let pass = 0; pass < 6; pass++) {
+      const touch = new Uint8Array(ps.length), ring = dilate(m, w, h, 2); let added = 0;
+      for (let i = 0; i < N; i++) if (pl[i] && ring[i] && !m[i]) touch[pl[i]] = 1;
+      for (let i = 0; i < N; i++) { const l = pl[i]; if (l && touch[l] && round[l] && !m[i]) { m[i] = 1; extra[i] = 1; added++; } }
+      if (!added) break;
+    }
+  }
   // close tiny gaps, then fill stones enclosed by gold
   const r = Math.max(1, Math.round(0.006 * Math.max(w, h)));
   m = erode(dilate(m, w, h, r), w, h, r);
   fillHoles(m, w, h, 0.004 * N);
+  if (st.sal) {
+    // keep to the metal that was found (plus the pearls beside it); drop plain cloth that got filled in
+    const seeds = new Uint8Array(N); for (let i = 0; i < N; i++) seeds[i] = prior[i] === 1 ? 1 : 0;
+    const near = dilate(seeds, w, h, r), nearX = dilate(extra, w, h, r + 1);
+    for (let i = 0; i < N; i++) if (m[i] && (st.sal[i] < 0.2 || !(near[i] || nearX[i]) || (st.tex[i] < 0.015 && st.sat[i] < 0.2 && !seeds[i] && !extra[i]))) m[i] = 0;
+  }
   for (let i = 0; i < N; i++) if (user[i] === 2) m[i] = 0; else if (user[i] === 1) m[i] = 1;
   const soft = boxBlur(Float32Array.from(m), w, h, 1);
   st.mask.set(soft);

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../studio/icons';
 import { SITE } from './site';
-import { autoCut, cutoutCanvas, detectHints, paint, refine, workCanvas, type CutState } from './cutout';
+import { autoCut, cutoutCanvas, detectHints, saliency, paint, refine, workCanvas, type CutState } from './cutout';
 import { METAL_TONES, pickStone, renderEdits, STONE_TONES, stoneName, type Edits, type MetalTone, type StoneTone } from './itemEdit';
 import type { Pose } from './Relief3D';
 
@@ -45,7 +45,7 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
   const load = (f?: File) => {
     setErr('');
     if (!f) return;
-    if (!f.type.startsWith('image/')) { setErr('Choose a photo (JPG or PNG).'); return; }
+    if (f.type && !f.type.startsWith('image/')) { setErr('Choose a photo (JPG or PNG).'); return; }
     const im = new Image();
     im.onload = async () => {
       setPhoto(im); setStatus('Finding the jewellery in your photo…');
@@ -53,9 +53,10 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
       await new Promise((r) => setTimeout(r, 30));
       const wc = workCanvas(im); work.current = wc;
       const hints = await detectHints(wc);
+      const sal = await saliency(wc);
       setStatus('Clearing hands, face and background…');
       await new Promise((r) => setTimeout(r, 30));
-      cut.current = autoCut(wc, hints);
+      cut.current = autoCut(wc, hints, sal); (window as unknown as { __cut?: CutState }).__cut = cut.current;
       setStatus(''); setView('3d'); setCutV((v) => v + 1);
     };
     im.onerror = () => setErr('That photo could not be opened. Try another one.');
@@ -157,8 +158,8 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
   /** the edited piece alone (from the 3D view when it is open), with the order details below */
   const picture = async (): Promise<Blob | null> => {
     let src: CanvasImageSource | null = null, sw = 0, sh = 0;
-    if (view === '3d' && glCv.current) { src = glCv.current; sw = glCv.current.width; sh = glCv.current.height; }
-    else if (edited) {
+    // the sharp cut-out with the customer's colour edits (the 3D frame has a lot of empty space around the piece)
+    if (edited) {
       const c = document.createElement('canvas'), m = Math.max(edited.width, edited.height) * 1.15;
       c.width = c.height = Math.round(m);
       const g = c.getContext('2d')!; g.translate(m / 2, m / 2); g.rotate((pose.turn * Math.PI) / 180); g.scale(pose.flip ? -1 : 1, 1);
@@ -166,7 +167,14 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
     }
     if (!src) return null;
     const W = 1080, pad = 40, side = W - pad * 2, k = Math.min(side / sw, 900 / sh), iw = sw * k, ih = sh * k;
-    const lines = summary.split('\n').slice(1, -1);
+    // wrap long lines (notes) instead of cutting them off
+    const meas = document.createElement('canvas').getContext('2d')!; meas.font = '500 28px Manrope, system-ui, sans-serif';
+    const lines: string[] = [];
+    for (const l of summary.split('\n').slice(1, -1)) {
+      let cur = '';
+      for (const w of l.split(' ')) { const t = cur ? cur + ' ' + w : w; if (meas.measureText(t).width > W - pad * 2 && cur) { lines.push(cur); cur = '   ' + w; } else cur = t; }
+      if (cur) lines.push(cur);
+    }
     const H = Math.round(ih + pad * 2 + 90 + lines.length * 40 + 40);
     const o = document.createElement('canvas'); o.width = W; o.height = H;
     const g = o.getContext('2d')!;
@@ -176,7 +184,7 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
     let y = ih + pad + 64;
     g.fillStyle = '#d9b77a'; g.font = '600 26px Manrope, system-ui, sans-serif'; g.fillText('BHAVANI GOLD · CUSTOMER DESIGN', pad, y); y += 50;
     g.fillStyle = '#f3ede3'; g.font = '500 28px Manrope, system-ui, sans-serif';
-    for (const l of lines) { g.fillText(l.length > 66 ? l.slice(0, 64) + '…' : l, pad, y); y += 40; }
+    for (const l of lines) { g.fillText(l, pad, y); y += 40; }
     return new Promise((r) => o.toBlob((b) => r(b), 'image/jpeg', 0.9));
   };
   const send = async () => {
