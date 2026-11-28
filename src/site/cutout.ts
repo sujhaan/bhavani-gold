@@ -472,3 +472,14 @@ export function cutoutCanvas(src: CanvasImageSource & { width: number; height: n
   t.getContext('2d')!.drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height);
   return { canvas: t, empty: false, x0, y0 };
 }
+
+/** A ready-made cut (our own design pictures): `m` is 0..1 at work size. Brush fixes still work on top. */
+export function cutFromMask(work: HTMLCanvasElement, m: Float32Array): CutState {
+  const st = autoCut(work, { faces: [], hands: [] }, null);
+  const { w, h } = st, N = w * h;
+  const inside = new Uint8Array(N); for (let i = 0; i < N; i++) inside[i] = m[i] > 0.5 ? 1 : 0;
+  const core = erode(inside, w, h, 2), near = dilate(inside, w, h, 3);
+  for (let i = 0; i < N; i++) st.prior[i] = core[i] ? 1 : near[i] ? 0 : 2;
+  st.mask.set(m); st.sal = null; st.product = false;
+  return st;
+}

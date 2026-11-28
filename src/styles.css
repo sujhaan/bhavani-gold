@@ -554,3 +554,14 @@ button.btn-wa { width: 100%; border: 0; cursor: pointer; }
 /* phones: the floating WhatsApp button would sit on top of the studio's options */
 @media (max-width: 900px) { body.in-studio .wa-float { opacity: 0; pointer-events: none; } }
 .wa-float { transition: transform .4s var(--ease), opacity .3s; }
+/* style cards appear with their own fade (tabs swap them in after the page has loaded) */
+.style-card.in { animation: cardIn .6s var(--ease) both; }
+.style-cta button.ul { background: none; border: 0; border-bottom: 1px solid var(--gold-d); padding: 0; cursor: pointer; font: inherit; font-size: 14px; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+/* small phones (360 px): nothing may push the page wider than the screen */
+html, body { overflow-x: clip; }
+@media (max-width: 420px) {
+  .hdr { gap: 12px; }
+  .logo { font-size: 20px; letter-spacing: .14em; }
+  .logo small { letter-spacing: .3em; }
+}

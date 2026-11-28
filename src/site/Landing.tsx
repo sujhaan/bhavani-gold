@@ -307,7 +307,7 @@ function Creations() {
               <h3>{cur.title}</h3>
               <p className="small">Weight and price depend on the exact piece — ask us.</p>
               <a className="pill gold" href={wa(`Hello Bhavani Gold, I saw "${cur.title}" (${cur.id}) on your website. Can you make one like this? Please share weight and price.`)} target="_blank" rel="noreferrer"><Icon name="wa" /> Ask about this</a>
-              <a className="pill ghost" href="#design" onClick={() => setOpen(null)}>Design my own</a>
+              <button className="pill ghost" onClick={() => { setOpen(null); editDesign(photo(cur.id), cur.title); }}>Change this design</button>
               <div className="lb-nav"><button onClick={() => setOpen((open! - 1 + list.length) % list.length)}><Icon name="back" /></button><button onClick={() => setOpen((open! + 1) % list.length)}><Icon name="arrow" /></button><button onClick={() => setOpen(null)}><Icon name="x" /></button></div>
             </div>
           </div>
@@ -338,6 +338,14 @@ const STYLES: { tab: StyleTab[]; name: string; karat: string; img: string; note:
   { tab: ['Beads', '22K'], name: 'Pearl anklet', karat: '22K gold & pearls', img: 'ds-anklet-pearl', note: 'A fine chain with pearl drops all around.' },
   { tab: ['Beads', '22K'], name: 'Flower anklet', karat: '22K gold & pearls', img: 'ds-anklet-flower', note: 'Small stone flowers with a pearl under each one.' },
 ];
+/** Opens a picture from the page in the photo editor of the 3D studio, ready to change. */
+function editDesign(url: string, name: string, mask?: string) {
+  const n = name.toLowerCase();
+  const piece = /bangle/.test(n) ? 'Bangle' : /bracelet/.test(n) ? 'Bracelet' : /necklace|choker|strand|haram|mala/.test(n) ? 'Necklace' : /earring|jhumka|chandbali/.test(n) ? 'Earrings' : /pendant/.test(n) ? 'Pendant' : /ring/.test(n) ? 'Ring' : /chain/.test(n) ? 'Chain' : 'Other';
+  document.getElementById('design')?.scrollIntoView({ behavior: 'smooth' });
+  window.dispatchEvent(new CustomEvent('bhavani:edit', { detail: { url, name, piece, mask } }));
+}
+
 function Styles() {
   const [tab, setTab] = useState<StyleTab>('Rose gold');
   const list = STYLES.filter((x) => x.tab.includes(tab));
@@ -357,12 +365,12 @@ function Styles() {
       ) : (
         <div className="style-grid">
           {list.map((x) => (
-            <article key={x.img} className="style-card" data-reveal>
+            <article key={tab + x.img} className="style-card in">
               <div className="style-img"><img src={photo(x.img)} alt={`${x.name}, ${x.karat}`} loading="lazy" /></div>
               <p className="mono">{x.karat}</p>
               <h3>{x.name}</h3>
               <p>{x.note}</p>
-              <div className="style-cta"><a className="ul" href="#design">Design it in 3D</a><a className="ul" href={wa(`Hello Bhavani Gold, I like the ${x.name} (${x.karat}) on your website. Please share weight and price.`)} target="_blank" rel="noreferrer">Ask price</a></div>
+              <div className="style-cta"><button className="ul" onClick={() => editDesign(photo(x.img), x.name, `photos/cut-${x.img}.png`)}>Change this design</button><a className="ul" href={wa(`Hello Bhavani Gold, I like the ${x.name} (${x.karat}) on your website. Please share weight and price.`)} target="_blank" rel="noreferrer">Ask price</a></div>
             </article>
           ))}
         </div>

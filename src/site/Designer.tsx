@@ -8,7 +8,7 @@ import { designThumb } from '../studio/thumbs';
 import { Icon } from '../studio/icons';
 import { SITE } from './site';
 import PartEditor from './PartEditor';
-import UploadEditor from './UploadEditor';
+import UploadEditor, { type StartPhoto } from './UploadEditor';
 import { startRealPhoto, type PhotoJob } from './realPhoto';
 import { placements } from '../engine/assembly';
 import {
@@ -61,6 +61,13 @@ export default function Designer() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const three = useRef<{ scene: THREE.Scene; camera: THREE.Camera } | null>(null);
   const [upload, setUpload] = useState(false);
+  const [start, setStart] = useState<StartPhoto | null>(null);
+  // "Change this design" on a picture elsewhere on the page opens it here, ready to edit
+  useEffect(() => {
+    const on = (e: Event) => { setStart((e as CustomEvent<StartPhoto>).detail); setUpload(true); };
+    window.addEventListener('bhavani:edit', on);
+    return () => window.removeEventListener('bhavani:edit', on);
+  }, []);
   const [photo, setPhoto] = useState<{ key: string; progress: number; url: string | null } | null>(null);
   const [photoOpen, setPhotoOpen] = useState(false);
   const jobRef = useRef<PhotoJob | null>(null);
@@ -322,7 +329,7 @@ export default function Designer() {
 
  <div className="dz-step">
           <p className="dz-label"><span>07</span> Have your own design? <em>upload a photo</em></p>
-          <button className="dz-upload" onClick={() => setUpload(true)}><Icon name="image" size={18} /> Upload a photo: we cut out the piece so you can change it in 3D</button>
+          <button className="dz-upload" onClick={() => { setStart(null); setUpload(true); }}><Icon name="image" size={18} /> Upload a photo: we cut out the piece so you can change it in 3D</button>
         </div>
 
         <div className="dz-send">
@@ -332,7 +339,7 @@ export default function Designer() {
         </div>
       </div>
 
-      {upload && <UploadEditor onClose={() => setUpload(false)} />}
+      {upload && <UploadEditor key={start?.url ?? 'own'} start={start} onClose={() => { setUpload(false); setStart(null); }} />}
       {photoOpen && photo && (
         <div className="lightbox" onClick={() => setPhotoOpen(false)} data-lenis-prevent>
           <div className="shot-modal rp" onClick={(e) => e.stopPropagation()}>

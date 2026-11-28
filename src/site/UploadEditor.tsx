@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../studio/icons';
 import { SITE } from './site';
-import { autoCut, cutoutCanvas, detectHints, saliency, paint, refine, workCanvas, type CutState } from './cutout';
+import { autoCut, cutFromMask, cutoutCanvas, detectHints, saliency, paint, refine, workCanvas, type CutState } from './cutout';
 import { METAL_TONES, pickStone, renderEdits, STONE_TONES, stoneName, type Edits, type MetalTone, type StoneTone } from './itemEdit';
 import type { Pose } from './Relief3D';
 
@@ -15,7 +15,9 @@ type Tool = 'stone' | 'keep' | 'remove';
 type View = '3d' | 'clean';
 
 /** A customer's own photo: the jewellery is cut out by itself, made editable and shown in 3D, then sent to the shop. */
-export default function UploadEditor({ onClose }: { onClose: () => void }) {
+export type StartPhoto = { url: string; name: string; piece?: string; mask?: string };
+
+export default function UploadEditor({ onClose, start }: { onClose: () => void; start?: StartPhoto | null }) {
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [status, setStatus] = useState('');
   const [cutV, setCutV] = useState(0); // bumps when the cut changes
@@ -40,6 +42,7 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
   const cleanCv = useRef<HTMLCanvasElement>(null);
   const glCv = useRef<HTMLCanvasElement | null>(null);
   const history = useRef<Uint8Array[]>([]);
+  const preset = useRef<HTMLImageElement | null>(null);
   const painting = useRef(false);
 
   const load = (f?: File) => {
@@ -52,6 +55,17 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
       setEdits({ metal: 'photo', swaps: [], shine: 0 }); setPicked(null); setPose({ scale: 1, turn: 0, flip: false, depth: 1 }); history.current = [];
       await new Promise((r) => setTimeout(r, 30));
       const wc = workCanvas(im); work.current = wc;
+      if (preset.current) {
+        // our own design picture: use its ready-made cut
+        const mi = preset.current; preset.current = null;
+        const c = document.createElement('canvas'); c.width = wc.width; c.height = wc.height;
+        const g = c.getContext('2d')!; g.drawImage(mi, 0, 0, wc.width, wc.height);
+        const px = g.getImageData(0, 0, wc.width, wc.height).data, m = new Float32Array(wc.width * wc.height);
+        for (let i = 0; i < m.length; i++) m[i] = px[i * 4] / 255;
+        cut.current = cutFromMask(wc, m); (window as unknown as { __cut?: CutState }).__cut = cut.current;
+        setStatus(''); setView('3d'); setCutV((v) => v + 1);
+        return;
+      }
       const hints = await detectHints(wc);
       const sal = await saliency(wc);
       setStatus('Clearing hands, face and background…');
@@ -62,6 +76,25 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
     im.onerror = () => setErr('That photo could not be opened. Try another one.');
     im.src = URL.createObjectURL(f);
   };
+
+  // opened from a design on the page ("Change this design"): load that picture straight away
+  useEffect(() => {
+    if (!start) return;
+    let gone = false;
+    (async () => {
+      try {
+        const blob = await (await fetch(start.url)).blob();
+        if (gone) return;
+        if (start.piece) setType(start.piece);
+        if (start.mask) {
+          preset.current = await new Promise<HTMLImageElement | null>((res) => { const mi = new Image(); mi.onload = () => res(mi); mi.onerror = () => res(null); mi.src = start.mask!; });
+          if (gone) return;
+        }
+        load(new File([blob], start.url.split('/').pop() || 'design.jpg', { type: blob.type || 'image/jpeg' }));
+      } catch { setErr('That design could not be opened. Try uploading a photo instead.'); }
+    })();
+    return () => { gone = true; };
+  }, [start?.url]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the jewellery alone (cropped, transparent), and with the customer's colour edits
   const base = useMemo(() => {
@@ -143,7 +176,7 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
 
   const metalLabel = METAL_TONES.find((m) => m.id === edits.metal)!.label;
   const summary = [
-    'Hello Bhavani Gold! I uploaded a design on your website and edited it.',
+    start ? `Hello Bhavani Gold! I changed the "${start.name}" design on your website.` : 'Hello Bhavani Gold! I uploaded a design on your website and edited it.',
     type && `Piece: ${type}`,
     `Gold colour: ${metalLabel}`,
     ...edits.swaps.map((s) => `Change ${s.name} to ${STONE_TONES.find((t) => t.id === s.to)!.label}`),
@@ -212,7 +245,7 @@ export default function UploadEditor({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div className="lightbox up-wrap" onClick={onClose} data-lenis-prevent>
       <div className="up" onClick={(e) => e.stopPropagation()}>
-        <div className="up-head"><h3>Your own design</h3><button className="pill-icon" aria-label="Close" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="up-head"><h3>{start ? `Change: ${start.name}` : 'Your own design'}</h3><button className="pill-icon" aria-label="Close" onClick={onClose}><Icon name="x" /></button></div>
         <div className="up-body">
           <div className="up-left">
             {!photo ? (
